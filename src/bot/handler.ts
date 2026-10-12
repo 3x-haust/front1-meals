@@ -1,4 +1,5 @@
-import { day, koreanDate, photoUrl, week } from "../ourhome/client";
+import { z } from "zod";
+import { dateSchema, day, koreanDate, photoUrl, weekStart } from "../ourhome/client";
 import type { Meal } from "../ourhome/client";
 import { languageSchema } from "../config/secrets";
 import type { Language } from "../config/secrets";
@@ -7,11 +8,15 @@ import type { Telegram, Update } from "./telegram";
 const copy = {
   ko: { today: "오늘 식단", tomorrow: "내일 식단", week: "이번 주 식단", settings: "언어 설정",
     closed: "휴무", unpublished: "식단 미등록", empty: "등록된 식단이 없습니다.",
-    failure: "식단을 불러오지 못했습니다. 잠시 후 다시 요청해 주세요.", saved: "한국어로 설정했습니다." },
+    failure: "식단을 불러오지 못했습니다. 잠시 후 다시 요청해 주세요.", saved: "한국어로 설정했습니다.",
+    previous: "이전", next: "다음" },
   en: { today: "Today's menu", tomorrow: "Tomorrow's menu", week: "This week's menu", settings: "Language",
     closed: "Closed", unpublished: "Not published", empty: "No menu is available.",
-    failure: "Could not load the menu. Please try again later.", saved: "Language set to English." },
+    failure: "Could not load the menu. Please try again later.", saved: "Language set to English.",
+    previous: "Previous", next: "Next" },
 } as const;
+
+const weekCallback = z.tuple([z.literal("week"), dateSchema, z.coerce.number().int().min(0).max(6)]);
 
 export function dateLabel(date: string, language: Language): string {
   const instant = new Date(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}T12:00:00+09:00`);
@@ -105,25 +110,48 @@ export function createBot(options: {
       }
     }
   };
+  const showWeek = async (start: string, page: number, messageId?: number) => {
+    const monday = new Date(`${start.slice(0, 4)}-${start.slice(4, 6)}-${start.slice(6)}T00:00:00+09:00`);
+    const result = await day(koreanDate(monday, page));
+    const c = copy[language];
+    const content = result.status === "published"
+      ? result.meals.map((meal) => mealText(meal, language)).join("\n\n") || `${dateLabel(result.date, language)} · ${c.empty}`
+      : `${dateLabel(result.date, language)} · ${result.status === "closed" ? c.closed : c.unpublished}`;
+    const text = `${content}\n\n<i>${page + 1} / 7</i>`;
+    const buttons = [
+      ...(page > 0 ? [{ text: c.previous, callback_data: `week:${start}:${page - 1}` }] : []),
+      ...(page < 6 ? [{ text: c.next, callback_data: `week:${start}:${page + 1}` }] : []),
+    ];
+    const reply_markup = { inline_keyboard: [buttons] };
+    if (messageId === undefined) await sendText(text, { reply_markup });
+    else await options.send("editMessageText", {
+      chat_id: options.chatId, message_id: messageId, text, parse_mode: "HTML", reply_markup,
+    });
+  };
   const handle = async (update: Update) => {
     const callback = update.callback_query;
     const message = callback?.message ?? update.message;
     if (message?.chat.id !== options.chatId || message.chat.type !== "private") return;
-    if (callback) {
-      await options.send("answerCallbackQuery", { callback_query_id: callback.id });
-      const parsed = languageSchema.safeParse(callback.data?.replace(/^lang:/, ""));
-      if (!parsed.success) return;
-      await options.saveLanguage(parsed.data);
-      language = parsed.data;
-      await commands();
-      await sendText(copy[language].saved);
-      return;
-    }
-    const text = message.text ?? "";
-    const selected = Object.entries(copy[language]).find(([key, value]) =>
-      ["today", "tomorrow", "week", "settings"].includes(key) && value === text);
-    const command = selected ? `/${selected[0]}` : text.split(/\s/)[0]?.split("@")[0];
     try { // no-excuse-ok: catch -- Responses never expose upstream errors or credentials.
+      if (callback) {
+        await options.send("answerCallbackQuery", { callback_query_id: callback.id });
+        const page = weekCallback.safeParse(callback.data?.split(":"));
+        if (page.success) {
+          if (message.message_id !== undefined) await showWeek(page.data[1], page.data[2], message.message_id);
+          return;
+        }
+        const parsed = languageSchema.safeParse(callback.data?.replace(/^lang:/, ""));
+        if (!parsed.success) return;
+        await options.saveLanguage(parsed.data);
+        language = parsed.data;
+        await commands();
+        await sendText(copy[language].saved);
+        return;
+      }
+      const text = message.text ?? "";
+      const selected = Object.entries(copy[language]).find(([key, value]) =>
+        ["today", "tomorrow", "week", "settings"].includes(key) && value === text);
+      const command = selected ? `/${selected[0]}` : text.split(/\s/)[0]?.split("@")[0];
       if (command === "/settings" || command === "/language" || command === "/start" || command === "/help") {
         if (command === "/start" || command === "/help") {
           await commands();
@@ -134,11 +162,7 @@ export function createBot(options: {
           { text: "English", callback_data: "lang:en" },
         ]] } });
       } else if (command === "/week") {
-        for (const result of await week()) {
-          await sendText(result.status === "published"
-            ? result.meals.map((m) => mealText(m, language)).join("\n\n") || `${dateLabel(result.date, language)} · ${copy[language].empty}`
-            : `${dateLabel(result.date, language)} · ${result.status === "closed" ? copy[language].closed : copy[language].unpublished}`);
-        }
+        await showWeek(weekStart(), 0);
       } else if (command === "/today" || command === "/tomorrow") {
         await showDay(koreanDate(new Date(), command === "/tomorrow" ? 1 : 0));
       } else {

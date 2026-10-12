@@ -87,12 +87,18 @@ export async function day(date: string) {
   return { date, status, meals: status === "published" ? await menu(date) : [] };
 }
 
-export async function week(now = new Date()) {
+export function weekStart(now = new Date()): string {
   const date = koreanDate(now);
   const monday = new Date(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}T00:00:00Z`);
   monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+  return monday.toISOString().slice(0, 10).replaceAll("-", "");
+}
+
+export async function week(now = new Date()) {
+  const start = weekStart(now);
+  const monday = new Date(`${start.slice(0, 4)}-${start.slice(4, 6)}-${start.slice(6)}T00:00:00+09:00`);
   return Promise.all(Array.from({ length: 7 }, (_, i) =>
-    day(koreanDate(new Date(monday.valueOf() - 9 * 3600000), i))));
+    day(koreanDate(monday, i))));
 }
 
 export function photoUrl(value: string): string | undefined {

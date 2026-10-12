@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const person = z.object({ id: z.number().int() });
 const message = z.object({
+  message_id: z.number().int().optional(),
   from: person.optional(),
   chat: z.object({ id: z.number().int(), type: z.string() }),
   text: z.string().optional(),
