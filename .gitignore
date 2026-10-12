@@ -1,0 +1,13 @@
+.tools/
+.debug-journal.md
+.env*
+!.env.example
+node_modules/
+.wrangler/
+.dev.vars*
+*.log
+*.pem
+*.key
+credentials*.json
+secrets*.json
+.DS_Store

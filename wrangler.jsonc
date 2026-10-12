@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "front1-private-meals",
+  "account_id": "aa473a9f3ba135e628bb53ef3479d0f3",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-12",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "BOT", "class_name": "MealBot" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MealBot"] }],
+  "observability": { "enabled": false }
+}

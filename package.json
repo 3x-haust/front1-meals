@@ -1,0 +1,22 @@
+{
+  "name": "front1-meals",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "provision": "bun run scripts/provision.ts",
+    "start": "bun run scripts/local.ts",
+    "deploy": "wrangler deploy",
+    "dev:worker": "wrangler dev"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.0.0",
+    "@cloudflare/workers-types": "^5.20261012.1"
+  }
+}
